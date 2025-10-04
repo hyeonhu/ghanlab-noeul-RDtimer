@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>노을공대 리저/다이 타이머</title>
+<link rel="icon" type="image/png" href="https://i.imgur.com/E2A4DUp.png"/>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; text-align:center; padding:20px; font-size:14px; transition:background .3s,color .3s; }
+  .light { background:#f5f6f8; color:#222; }
+  .dark  { background:#121212; color:#e0e0e0; }
+
+  h1{ margin:0 0 20px; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .theme-toggle{ position:absolute; top:15px; right:20px; }
+
+  .controls{ margin:10px 0 20px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  .btn{ padding:10px 16px; border-radius:10px; font-weight:700; border:none; cursor:pointer; }
+  .btn-add-rez{ background:#3498db; color:#fff; } .btn-add-die{ background:#e74c3c; color:#fff; } .btn-brief{ background:#2ecc71; color:#fff; }
+
+  .timers{ display:flex; flex-wrap:wrap; gap:14px; justify-content:center; }
+  .timer-card{ position:relative; width:150px; padding:10px 10px 12px; border-radius:12px; background:inherit; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  .dark .timer-card{ box-shadow:0 1px 4px rgba(255,255,255,.05); }
+  .timer-card .delete-btn{ position:absolute; top:6px; right:6px; width:20px; height:20px; border:none; border-radius:50%; background:rgba(0,0,0,.15); color:#fff; cursor:pointer; font-weight:900; line-height:20px; }
+
+  /* align slot */
+  .rez-level-slot{ height:28px; margin:0 auto 6px; display:flex; align-items:center; justify-content:center; }
+
+  .circle-wrapper{ width:120px; height:120px; margin:0 auto 8px; position:relative; }
+  .circle-svg{ transform:rotate(-90deg); }
+  .bg-ring{ fill:none; stroke:#e6e6e6; stroke-width:6; }
+  .dark .bg-ring { stroke:#2b2f36 !important; } /* super dark in dark mode */
+  .fg-ring{ fill:none; stroke-width:6; stroke-linecap:round; stroke-dasharray:314; stroke-dashoffset:0; transition:stroke-dashoffset .2s linear; }
+  .fg-ring.rez{ stroke:#3498db; } .fg-ring.die{ stroke:#e74c3c; }
+
+  .time-label{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; pointer-events:none; }
+
+  .name-input{ text-align:center; font-size:15px; font-weight:700; width:100%; padding:6px 8px; border-radius:8px; border:1px solid rgba(0,0,0,.15); background:transparent; color:inherit; }
+
+  .meta{ margin-top:6px; font-size:12px; line-height:1.35; white-space:pre-line; min-height:1.2em; }
+
+  @keyframes blinkScreen{ 0%,50%,100%{background-color:transparent;} 25%,75%{background-color:rgba(231,76,60,.15);} }
+  .screen-blink{ animation:blinkScreen 1s infinite; }
+
+  /* selects, theme-aware */
+  select.select, .select{ padding:6px 8px; border-radius:8px; border:1px solid; appearance:none; -webkit-appearance:none; -moz-appearance:none; }
+  body.light select.select, body.light .select{ background:#fff !important; color:#222 !important; border-color:rgba(0,0,0,.3) !important; }
+  body.dark  select.select, body.dark  .select{ background:#1e1f22 !important; color:#eaeaea !important; border-color:rgba(255,255,255,.25) !important; }
+
+  /* Toast (success/error) */
+  .toast{
+    position:fixed; left:50%; transform:translateX(-50%);
+    top:110px; padding:8px 12px; border-radius:10px;
+    font-size:13px; font-weight:800; letter-spacing:.2px;
+    display:none; opacity:0; transition:opacity .2s ease;
+    backdrop-filter: blur(6px);
+    box-shadow:0 8px 24px rgba(0,0,0,.18);
+    border:1px solid transparent;
+    z-index:9999;
+  }
+  .toast.show{ opacity:1; }
+  /* Light theme colors */
+  body.light .toast.toast--success{ background:rgba(46,204,113,.15); color:#2ecc71; border-color:rgba(46,204,113,.8); }
+  body.light .toast.toast--error  { background:rgba(231, 76, 60,.15); color:#e74c3c; border-color:rgba(231, 76, 60,.85); }
+  /* Dark theme colors */
+  body.dark  .toast.toast--success{ background:rgba(39,174,96,.18); color:#27ae60; border-color:rgba(39,174,96,.85); }
+  body.dark  .toast.toast--error  { background:rgba(231,76,60,.18); color:#ff6b6b; border-color:rgba(231,76,60,.85); }
+
+</style>
+</head>
+<body>
+  <div class="theme-toggle">
+    <select id="themeSelect" class="select">
+      <option value="auto">🌗 자동</option>
+      <option value="light">🌞 라이트</option>
+      <option value="dark">🌙 다크</option>
+    </select>
+  </div>
+
+  <h1>노을공대 리저/다이 타이머</h1>
+
+  <div class="controls">
+    <button class="btn btn-add-rez" id="addRez">➕ 리저 추가 (레벨)</button>
+    <button class="btn btn-add-die" id="addDie">➕ 다이 추가 (15분)</button>
+    <label style="display:flex;align-items:center;gap:6px;font-weight:700;">
+      형식
+      <select id="briefFormat" class="select">
+        <option value="HHMMSS">HH:MM:SS</option>
+        <option value="HHMM" selected>HH:MM</option>
+        <option value="MMSS">MM:SS</option>
+        <option value="HhMmSs">00h00m00s</option>
+        <option value="HhMm">00h00m</option>
+        <option value="MmSs">00m00s</option>
+      </select>
+    </label>
+    <button class="btn btn-brief" id="briefBtn">📋 리저/다이 브리핑 복사</button>
+  </div>
+
+  <div class="timers" id="timers"></div>
+
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+<script>
+(() => {
+  const SVG_LEN = 314; // 2πr for r=50
+  const REZ_LEVEL_MIN = {1:57,2:54,3:51,4:48,5:45,6:42,7:39,8:36,9:33,10:30};
+  const REZ_LEVEL_MS  = (lv) => (REZ_LEVEL_MIN[lv]||30) * 60 * 1000;
+
+  const timers = new Map();
+  let counterRez = 0, counterDie = 0;
+
+  function getKRDate(d = new Date()){ return new Date(d.toLocaleString('en-US',{timeZone:'Asia/Seoul'})); }
+  function fmtTimeHMS(d){ return d.toLocaleTimeString('ko-KR',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+  function fmtBrief(endDate){
+    const sel = document.getElementById('briefFormat'); const f = sel? sel.value : 'HHMM';
+    const d = getKRDate(endDate);
+    const two = n => String(n).padStart(2,'0');
+    const hh = two(d.getHours()), mm = two(d.getMinutes()), ss = two(d.getSeconds());
+    switch(f){
+      case 'HHMMSS': return `${hh}:${mm}:${ss}`;
+      case 'HHMM': return `${hh}:${mm}`;
+      case 'MMSS': return `${mm}:${ss}`;
+      case 'HhMmSs': return `${hh}h${mm}m${ss}s`;
+      case 'HhMm': return `${hh}h${mm}m`;
+      case 'MmSs': return `${mm}m${ss}s`;
+      default: return `${hh}:${mm}`;
+    }
+  }
+  function fmtRemain(ms){ const m=Math.floor(ms/60000), s=Math.floor((ms%60000)/1000); return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
+
+  function applyTheme(mode){
+    document.body.classList.remove('light','dark');
+    if(mode==='light') document.body.classList.add('light');
+    else if(mode==='dark') document.body.classList.add('dark');
+    else {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.body.classList.add(prefersDark ? 'dark' : 'light');
+    }
+  }
+  const themeSelect = document.getElementById('themeSelect');
+  themeSelect.addEventListener('change', () => applyTheme(themeSelect.value));
+  applyTheme('auto');
+
+  function setScreenBlinking(on){ document.body.classList.toggle('screen-blink', on); }
+  function updateScreenBlinking(){
+    for(const t of timers.values()){
+      if(t.type==='die' && t.running){
+        const remaining = t.endAt - Date.now();
+        if(remaining <= 30000 && remaining > 0){ setScreenBlinking(true); return; }
+      }
+    }
+    setScreenBlinking(false);
+  }
+
+  function createTimer(type){
+    const id = `${type}-${type==='rez'? ++counterRez : ++counterDie}`;
+    let level = 10;
+    let duration = type==='rez'? REZ_LEVEL_MS(level) : 15*60*1000;
+
+    const card = document.createElement('div');
+    card.className = 'timer-card'; card.dataset.type=type; card.dataset.id=id;
+
+    const levelSelect = Array.from({length:10},(_,i)=>i+1).map(i=>`<option value="${i}" ${i===10?'selected':''}>Lv.${i}</option>`).join('');
+
+    card.innerHTML = `
+      <button class="delete-btn" title="삭제">×</button>
+      <div class="rez-level-slot">
+        ${type==='rez' ? `<select class="level-select select" style="padding:4px 6px;font-size:12px;">${levelSelect}</select>` : ``}
+      </div>
+      <div class="circle-wrapper">
+        <svg class="circle-svg" width="120" height="120">
+          <circle class="bg-ring" cx="60" cy="60" r="50"></circle>
+          <circle class="fg-ring ${type}" cx="60" cy="60" r="50"></circle>
+        </svg>
+        <div class="time-label">시작</div>
+      </div>
+      <input class="name-input" type="text" placeholder="이름 (선택)" />
+      <div class="meta"></div>
+    `;
+
+    const delBtn = card.querySelector('.delete-btn');
+    const ring   = card.querySelector('.fg-ring');
+    const label  = card.querySelector('.time-label');
+    const input  = card.querySelector('.name-input');
+    const meta   = card.querySelector('.meta');
+    const wrapper= card.querySelector('.circle-wrapper');
+    const levelSel = card.querySelector('.level-select');
+
+    const timerState = { id, type, duration, level, running:false, startAt:null, endAt:null, interval:null,
+      elements:{ ring, label, input, meta, card, wrapper, levelSel } };
+    timers.set(id, timerState);
+
+    function resetVisual(){ ring.style.strokeDashoffset = 0; label.textContent = '시작'; label.style.color='inherit'; meta.textContent=''; }
+
+    function startOrRefresh(){
+      if(timerState.running){ clearInterval(timerState.interval); timerState.running=false; }
+      timerState.duration = (type==='rez') ? REZ_LEVEL_MS(timerState.level) : timerState.duration;
+      timerState.startAt = Date.now();
+      timerState.endAt   = timerState.startAt + timerState.duration;
+
+      const s = getKRDate(new Date(timerState.startAt)), e = getKRDate(new Date(timerState.endAt));
+      meta.textContent = `시작: ${fmtTimeHMS(s)}\n종료: ${fmtTimeHMS(e)}`;
+
+      timerState.running = true;
+      timerState.interval = setInterval(() => {
+        const now = Date.now(), remaining = timerState.endAt - now;
+        if(remaining <= 0){
+          clearInterval(timerState.interval); timerState.running = false;
+          label.textContent = '00:00'; label.style.color='#999'; ring.style.strokeDashoffset = SVG_LEN;
+          updateScreenBlinking(); return;
+        }
+        ring.style.strokeDashoffset = SVG_LEN * (1 - (remaining / timerState.duration));
+        label.textContent = fmtRemain(remaining);
+        updateScreenBlinking();
+      }, 250);
+      updateScreenBlinking();
+    }
+
+    if(levelSel && type==='rez'){
+      levelSel.addEventListener('change', () => {
+        timerState.level = parseInt(levelSel.value, 10);
+        timerState.duration = REZ_LEVEL_MS(timerState.level);
+        if(timerState.startAt){
+          timerState.endAt = timerState.startAt + timerState.duration;
+          const s=getKRDate(new Date(timerState.startAt)), e=getKRDate(new Date(timerState.endAt));
+          meta.textContent = `시작: ${fmtTimeHMS(s)}\n종료: ${fmtTimeHMS(e)}`;
+          if (timerState.endAt - Date.now() <= 0){
+            if(timerState.interval) clearInterval(timerState.interval);
+            timerState.running=false; label.textContent='00:00'; label.style.color='#999'; ring.style.strokeDashoffset=SVG_LEN; updateScreenBlinking();
+          }
+        }
+      });
+    }
+
+    wrapper.addEventListener('click', startOrRefresh);
+    wrapper.addEventListener('contextmenu', (e) => { e.preventDefault(); if(timerState.interval) clearInterval(timerState.interval);
+      timerState.running=false; timerState.startAt=null; timerState.endAt=null; resetVisual(); updateScreenBlinking(); });
+    delBtn.addEventListener('click', (e) => { e.stopPropagation(); if(timerState.interval) clearInterval(timerState.interval); timers.delete(id); card.remove(); updateScreenBlinking(); });
+
+    resetVisual();
+    document.getElementById('timers').appendChild(card);
+  }
+
+  document.getElementById('addRez').addEventListener('click', () => createTimer('rez'));
+  document.getElementById('addDie').addEventListener('click', () => createTimer('die'));
+
+  function buildBriefing(){
+    const dieParts=[], rezItems=[], now=Date.now();
+    timers.forEach(t => {
+      if(!t.endAt || !t.running) return;
+      const remaining = t.endAt - now; if(remaining <= 0) return;
+      const endTxt = fmtBrief(new Date(t.endAt));
+      const name = (t.elements.input.value || '').trim();
+      const piece = (name? name : '') + endTxt;
+      if(t.type==='die') dieParts.push(piece); else rezItems.push({end:t.endAt, piece});
+    });
+    rezItems.sort((a,b)=>a.end-b.end);
+    const rezParts = rezItems.map(x=>x.piece);
+    const left = dieParts.join(' '), right = rezParts.join(' ');
+    return left && right ? `${left} // ${right}` : (left || right || '');
+  }
+
+  async function copyBriefing(){
+    const text = buildBriefing();
+    if(!text){ showToast('error','복사할 브리핑이 없습니다.'); return; }
+    try { await navigator.clipboard.writeText(text); showToast('success','브리핑 복사 완료'); } 
+    catch(e){
+      const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+      showToast('success','브리핑 복사 완료');
+    }
+  }
+  document.getElementById('briefBtn').addEventListener('click', copyBriefing);
+
+  // auto mode react to OS change
+  try{
+    const mql=window.matchMedia('(prefers-color-scheme: dark)');
+    const cb=()=>{ if(!document.body.classList.contains('light') && !document.body.classList.contains('dark')) applyTheme('auto'); };
+    mql.addEventListener ? mql.addEventListener('change', cb) : mql.addListener && mql.addListener(cb);
+  }catch(_){}
+
+  function showToast(type, msg){
+    const t = document.getElementById('toast');
+    if(!t) return;
+    t.className = 'toast toast--' + type;
+    t.textContent = msg;
+    t.style.display = 'block';
+    requestAnimationFrame(()=>{
+      t.classList.add('show');
+      setTimeout(()=>{ t.classList.remove('show'); t.style.display='none'; }, 1500);
+    });
+  }
+
+})();</script>
+
+<div style="text-align:right; margin-top: 30px; font-size: 14px; color: gray;">제작자 - 간안본철수</div>
+</body>
+</html>
